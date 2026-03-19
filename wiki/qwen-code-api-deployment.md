@@ -28,7 +28,11 @@ Complete these steps:
 
 ### Clone the `Qwen Code` API repository (REMOTE)
 
-1. [Clone the repository](./git-vscode.md#clone-the-repository-using-the-vs-code-terminal) with the URL `https://github.com/inno-se-toolkit/qwen-code-api` to `~/qwen-code-api`.
+1. [Clone the repository](./git-vscode.md#clone-the-repository-using-the-vs-code-terminal)
+
+   with the URL `https://github.com/inno-se-toolkit/qwen-code-api`
+
+   to `~/qwen-code-api`.
 
 ### Pull the latest changes from the `Qwen Code` API repository (REMOTE)
 
