@@ -14,8 +14,6 @@
     - [IPv4](#ipv4)
     - [IPv6](#ipv6)
   - [Hostname](#hostname)
-  - [`<hostname>` placeholder](#hostname-placeholder)
-  - [`<host-ip-address>` placeholder](#host-ip-address-placeholder)
   - [`<host>` placeholder](#host-placeholder)
   - [`localhost`](#localhost)
   - [`127.0.0.1`](#127001)
@@ -113,14 +111,6 @@ A hostname is a human-readable label assigned to a [host](#host) on a [network](
 It is used to identify the host instead of its [IP address](#ip-address).
 
 Examples: [`localhost`](#localhost), `my-server`, [`vm.innopolis.university`](./vm.md#go-to-the-vms-site).
-
-### `<hostname>` placeholder
-
-The [hostname](#hostname) (without `<` and `>`).
-
-### `<host-ip-address>` placeholder
-
-The [IP address](#ip-address) of the [host](#host) (without `<` and `>`).
 
 ### `<host>` placeholder
 
