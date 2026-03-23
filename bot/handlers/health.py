@@ -1,15 +1,20 @@
 import httpx
 from config import config
+from services.api import LMSClient
+
+client = LMSClient()
 
 def handle() -> str:
     try:
-        resp = httpx.get(f"{config.LMS_API_BASE_URL}/health", timeout=5)
-        if resp.status_code == 200:
-            return "Backend is healthy."
+        ok, info = client.get_health()
+        if ok:
+            return f"Backend is healthy. {info} items available."
         else:
-            return f"Backend returned status {resp.status_code}"
+            return f"Backend error: HTTP {info}. Check that the services are running."
+    except httpx.ConnectError:
+        return f"Backend error: connection refused ({config.LMS_API_BASE_URL}). Check that the services are running."
     except Exception as e:
-        return f"Backend unreachable: {e}"
+        return f"Backend error: {e}"
 
 async def handle_telegram(update, context):
     await update.message.reply_text(handle())

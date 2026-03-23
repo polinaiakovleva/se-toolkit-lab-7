@@ -1,25 +1,37 @@
 #!/usr/bin/env python
 import sys
 import argparse
+import os
 from config import config
-from handlers import start, help, health, labs
+from handlers import start, help, health, labs, scores
 
 def run_test(command: str) -> None:
     cmd = command.strip()
-    if cmd.startswith("/start"):
+    cmd = os.path.basename(cmd)
+    if cmd.startswith('/'):
+        cmd = cmd[1:]
+    parts = cmd.split()
+    base_cmd = parts[0]
+    args = parts[1:] if len(parts) > 1 else []
+
+    if base_cmd == "start":
         print(start.handle())
-    elif cmd.startswith("/help"):
+    elif base_cmd == "help":
         print(help.handle())
-    elif cmd.startswith("/health"):
+    elif base_cmd == "health":
         print(health.handle())
-    elif cmd.startswith("/labs"):
+    elif base_cmd == "labs":
         print(labs.handle())
+    elif base_cmd == "scores":
+        if args:
+            print(scores.handle(args[0]))
+        else:
+            print("Please provide a lab name, e.g., /scores lab-04")
     else:
-        print("Unknown command")
+        print("Unknown command. Use /help for available commands.")
     sys.exit(0)
 
 def run_telegram():
-    """Run bot with Telegram polling."""
     import asyncio
     from telegram.ext import Application, CommandHandler
 
@@ -32,6 +44,7 @@ def run_telegram():
     app.add_handler(CommandHandler("help", help.handle_telegram))
     app.add_handler(CommandHandler("health", health.handle_telegram))
     app.add_handler(CommandHandler("labs", labs.handle_telegram))
+    app.add_handler(CommandHandler("scores", scores.handle_telegram))
     app.run_polling()
 
 def main():

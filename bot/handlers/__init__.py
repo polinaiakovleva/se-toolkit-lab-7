@@ -1,1 +1,1 @@
-from . import start, help, health, labs
+from . import start, help, health, labs, scores
