@@ -3,7 +3,8 @@ import sys
 import argparse
 import os
 from config import config
-from handlers import start, help, health, labs, scores
+from handlers import start, help, health, labs, scores, router
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 
 def run_test(command: str) -> None:
     cmd = command.strip()
@@ -28,13 +29,27 @@ def run_test(command: str) -> None:
         else:
             print("Please provide a lab name, e.g., /scores lab-04")
     else:
-        print("Unknown command. Use /help for available commands.")
+        # пробуем обработать через LLM
+        print(router.handle(command))
     sys.exit(0)
 
-def run_telegram():
-    import asyncio
-    from telegram.ext import Application, CommandHandler
+async def button_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if data == "labs":
+        response = labs.handle()
+    elif data == "lowest_pass":
+        response = router.handle("which lab has the lowest pass rate")
+    elif data == "top_lab4":
+        response = router.handle("who are the top 5 students in lab 4")
+    elif data == "help":
+        response = help.handle()
+    else:
+        response = "Unknown option."
+    await query.edit_message_text(response)
 
+def run_telegram():
     if not config.BOT_TOKEN:
         print("Error: BOT_TOKEN not set in .env.bot.secret")
         sys.exit(1)
@@ -45,6 +60,8 @@ def run_telegram():
     app.add_handler(CommandHandler("health", health.handle_telegram))
     app.add_handler(CommandHandler("labs", labs.handle_telegram))
     app.add_handler(CommandHandler("scores", scores.handle_telegram))
+    app.add_handler(CallbackQueryHandler(button_callback))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, router.handle_telegram))
     app.run_polling()
 
 def main():
