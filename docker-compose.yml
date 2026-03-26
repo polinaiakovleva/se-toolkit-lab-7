@@ -89,6 +89,18 @@ services:
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile
 
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+      network: host
+    restart: unless-stopped
+    network_mode: "host"
+    env_file:
+      - .env.docker.secret
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
 
