@@ -1,6 +1,7 @@
 import sys
 import json
 import httpx
+import traceback
 from config import config
 from services.api import LMSClient
 from services.llm import LLMClient
@@ -9,105 +10,51 @@ from services.tools import tools
 llm = LLMClient()
 api = LMSClient()
 
-
-# ---- Tools ----
 def get_items(args):
-    resp = api.get_items()
-    if resp.status_code == 200:
-        items = resp.json()
-        labs = [i["title"] for i in items if i.get("type") == "lab"]
-        return f"Found {len(labs)} labs: " + ", ".join(labs)
-    return f"Error fetching items: {resp.status_code}"
-
+    resp = api.get_items() if hasattr(api, 'get_items') else api._get("items/")
+    return json.dumps(resp.json()) if resp.status_code == 200 else f"Error: {resp.status_code}"
 
 def get_learners(args):
-    resp = api.get_learners()
-    if resp.status_code == 200:
-        learners = resp.json()
-        return f"Total learners: {len(learners)}"
-    return f"Error: {resp.status_code}"
-
+    resp = api.get_learners() if hasattr(api, 'get_learners') else api._get("learners/")
+    return json.dumps(resp.json()) if resp.status_code == 200 else f"Error: {resp.status_code}"
 
 def get_scores(args):
     lab = args.get("lab")
-    if not lab:
-        return "Missing lab parameter"
     resp = api._get(f"analytics/scores?lab={lab}")
-    if resp.status_code == 200:
-        return f"Scores for {lab}: {resp.json()}"
-    return f"Error: {resp.status_code}"
-
+    return json.dumps(resp.json()) if resp.status_code == 200 else f"Error: {resp.status_code}"
 
 def get_pass_rates(args):
     lab = args.get("lab")
-    if not lab:
-        return "Missing lab parameter"
     resp = api._get(f"analytics/pass-rates?lab={lab}")
-    if resp.status_code == 200:
-        data = resp.json()
-        lines = [f"Pass rates for {lab}:"]
-        for item in data:
-            lines.append(f"- {item['task']}: {item['avg_score']}% ({item['attempts']} attempts)")
-        return "\n".join(lines)
-    return f"Error: {resp.status_code}"
-
+    return json.dumps(resp.json()) if resp.status_code == 200 else f"Error: {resp.status_code}"
 
 def get_timeline(args):
     lab = args.get("lab")
-    if not lab:
-        return "Missing lab parameter"
     resp = api._get(f"analytics/timeline?lab={lab}")
-    if resp.status_code == 200:
-        return f"Timeline for {lab}: {len(resp.json())} days of data"
-    return f"Error: {resp.status_code}"
-
+    return json.dumps(resp.json()) if resp.status_code == 200 else f"Error: {resp.status_code}"
 
 def get_groups(args):
     lab = args.get("lab")
-    if not lab:
-        return "Missing lab parameter"
     resp = api._get(f"analytics/groups?lab={lab}")
-    if resp.status_code == 200:
-        data = resp.json()
-        groups = [f"{g['group']}: {g['avg_score']}% ({g['students']} students)" for g in data]
-        return "Groups performance:\n" + "\n".join(groups)
-    return f"Error: {resp.status_code}"
-
+    return json.dumps(resp.json()) if resp.status_code == 200 else f"Error: {resp.status_code}"
 
 def get_top_learners(args):
     lab = args.get("lab")
     limit = args.get("limit", 5)
-    if not lab:
-        return "Missing lab parameter"
     resp = api._get(f"analytics/top-learners?lab={lab}&limit={limit}")
-    if resp.status_code == 200:
-        data = resp.json()
-        learners = [f"{i+1}. {l['name']} - {l['score']}%" for i, l in enumerate(data)]
-        return f"Top {len(data)} learners in {lab}:\n" + "\n".join(learners)
-    return f"Error: {resp.status_code}"
-
+    return json.dumps(resp.json()) if resp.status_code == 200 else f"Error: {resp.status_code}"
 
 def get_completion_rate(args):
     lab = args.get("lab")
-    if not lab:
-        return "Missing lab parameter"
     resp = api._get(f"analytics/completion-rate?lab={lab}")
-    if resp.status_code == 200:
-        return f"Completion rate for {lab}: {resp.json()['completion_rate']}%"
-    return f"Error: {resp.status_code}"
-
+    return json.dumps(resp.json()) if resp.status_code == 200 else f"Error: {resp.status_code}"
 
 def trigger_sync(args):
-    resp = httpx.post(
-        f"{api.base_url}/pipeline/sync",
-        headers=api.headers,
-        json={},
-        timeout=30
-    )
-    if resp.status_code == 200:
-        return "Sync triggered successfully."
-    return f"Sync failed: {resp.status_code}"
-
+    try:
+        resp = httpx.post(f"{api.base_url}/pipeline/sync", headers=api.headers, json={}, timeout=30)
+        return "Sync triggered successfully." if resp.status_code == 200 else f"Sync failed: {resp.status_code}"
+    except Exception as e:
+        return f"Sync error: {e}"
 
 function_map = {
     "get_items": get_items,
@@ -121,17 +68,13 @@ function_map = {
     "trigger_sync": trigger_sync,
 }
 
-
 system_prompt = (
-    "You are a helpful assistant for an LMS system. "
-    "You MUST use tools to answer questions. "
-    "For student-related questions, use get_learners. "
-    "For pass rate comparisons, call get_items and then get_pass_rates for each lab. "
-    "Always compute and return a FINAL answer with numbers and lab names. "
-    "Do not stop early. Do not say 'let me check'. "
-    "Always produce a final conclusion."
+    "You are an AI assistant for an LMS. "
+    "CRITICAL INSTRUCTION: When asked to compare multiple labs (e.g., 'lowest pass rate'), "
+    "you MUST issue ALL required tool calls SIMULTANEOUSLY in one turn. "
+    "DO NOT output conversational filler like 'Let me check' or 'I will continue'. "
+    "DO NOT stop early. Always compute and return the FINAL answer with numbers and names."
 )
-
 
 def handle(user_message: str) -> str:
     messages = [
@@ -139,8 +82,7 @@ def handle(user_message: str) -> str:
         {"role": "user", "content": user_message}
     ]
 
-    max_iterations = 15
-    last_tool_calls = set()
+    max_iterations = 10
 
     for _ in range(max_iterations):
         try:
@@ -148,65 +90,65 @@ def handle(user_message: str) -> str:
         except Exception as e:
             return f"LLM error: {e}"
 
-        message = response["choices"][0]["message"]
+        try:
+            message = response["choices"][0]["message"]
+        except (KeyError, IndexError):
+            return "Error: Invalid response format from LLM."
 
         if not message.get("tool_calls"):
-            content = message.get("content", "")
+            content = message.get("content", "No content generated by LLM.")
+            
+            # Анти-лень: если Qwen пытается отмазаться, заставляем его работать дальше
+            lower_content = content.lower()
+            if "let me" in lower_content or "continue" in lower_content or "checking" in lower_content:
+                messages.append(message)
+                messages.append({"role": "user", "content": "Do not stop. Execute the tool calls for the remaining labs and give me the final answer."})
+                continue
+                
+            return content
 
-            if content and ("%" in content or "lab" in content.lower()):
-                return content
-
-            messages.append(message)
-            continue
-
-        # защита от зацикливания
-        current_calls = tuple(
-            (tc["function"]["name"], frozenset(json.loads(tc["function"]["arguments"]).items()))
-            for tc in message["tool_calls"]
-        )
-
-        if current_calls in last_tool_calls:
-            return "I'm having trouble getting the data. Please try again later."
-
-        last_tool_calls.add(current_calls)
-
+        messages.append(message)
         tool_results = []
 
         for tool_call in message["tool_calls"]:
             func_name = tool_call["function"]["name"]
-            args = json.loads(tool_call["function"]["arguments"])
+            try:
+                args = json.loads(tool_call["function"]["arguments"])
+            except Exception:
+                args = {}
 
             print(f"[tool] LLM called: {func_name}({args})", file=sys.stderr)
 
             if func_name in function_map:
-                result = function_map[func_name](args)
-                print(f"[tool] Result: {result[:100]}...", file=sys.stderr)
-
-                tool_results.append({
-                    "tool_call_id": tool_call["id"],
-                    "role": "tool",
-                    "name": func_name,
-                    "content": json.dumps(result)
-                })
+                try:
+                    result = function_map[func_name](args)
+                except Exception as e:
+                    result = f"Tool execution error: {str(e)}"
             else:
-                tool_results.append({
-                    "tool_call_id": tool_call["id"],
-                    "role": "tool",
-                    "name": func_name,
-                    "content": f"Unknown tool: {func_name}"
-                })
+                result = f"Unknown tool: {func_name}"
 
-        messages.append(message)
+            tool_results.append({
+                "tool_call_id": tool_call["id"],
+                "role": "tool",
+                "name": func_name,
+                "content": str(result)
+            })
+
         messages.extend(tool_results)
 
-    return "Maximum iterations reached."
-
+    return "Query too complex, stopped after 10 iterations."
 
 async def handle_telegram(update, context):
     user_message = update.message.text
-    await context.bot.send_chat_action(
-        chat_id=update.effective_chat.id,
-        action="typing"
-    )
-    response = handle(user_message)
+    try:
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    except Exception:
+        pass
+    
+    try:
+        response = handle(user_message)
+    except Exception as e:
+        response = f"🔥 CRITICAL ROUTER ERROR: {e}"
+        print(f"Exception: {e}\n{traceback.format_exc()}", file=sys.stderr)
+        
     await update.message.reply_text(response)
